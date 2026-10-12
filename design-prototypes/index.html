@@ -1,0 +1,867 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>训练记录 UI 方向选择</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --page: #e8ebe8;
+      --page-ink: #202521;
+      --page-muted: #626a64;
+      --page-accent: #2e6455;
+      --page-line: #c9cfca;
+      --shadow: 0 26px 80px rgba(35, 44, 38, .18);
+      font-family: "Noto Sans SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100dvh;
+      background: var(--page);
+      color: var(--page-ink);
+    }
+
+    button { font: inherit; }
+
+    button:focus-visible {
+      outline: 3px solid rgba(46, 100, 85, .35);
+      outline-offset: 3px;
+    }
+
+    .showcase {
+      width: min(1180px, 100%);
+      min-height: 100dvh;
+      margin: 0 auto;
+      padding: 42px 28px;
+      display: grid;
+      grid-template-columns: minmax(250px, 360px) minmax(390px, 1fr);
+      align-items: center;
+      gap: clamp(30px, 7vw, 92px);
+    }
+
+    .brief { align-self: center; }
+
+    .brief h1 {
+      max-width: 10ch;
+      margin: 0;
+      font-size: clamp(34px, 4.8vw, 62px);
+      line-height: 1.02;
+      letter-spacing: -.055em;
+      font-weight: 780;
+    }
+
+    .brief > p {
+      max-width: 30em;
+      margin: 22px 0 30px;
+      color: var(--page-muted);
+      font-size: 15px;
+      line-height: 1.75;
+    }
+
+    .concept-nav {
+      display: grid;
+      gap: 4px;
+      border-top: 1px solid var(--page-line);
+    }
+
+    .concept-tab {
+      position: relative;
+      border: 0;
+      border-bottom: 1px solid var(--page-line);
+      background: transparent;
+      color: var(--page-muted);
+      padding: 17px 0 18px;
+      text-align: left;
+      cursor: pointer;
+      transition: color 160ms ease, padding-left 160ms ease;
+    }
+
+    .concept-tab strong {
+      display: block;
+      margin-bottom: 5px;
+      color: inherit;
+      font-size: 17px;
+      font-weight: 720;
+    }
+
+    .concept-tab span { font-size: 13px; }
+
+    .concept-tab[aria-selected="true"] {
+      color: var(--page-accent);
+      padding-left: 18px;
+    }
+
+    .concept-tab[aria-selected="true"]::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 18px;
+      bottom: 18px;
+      width: 4px;
+      background: var(--page-accent);
+      border-radius: 4px;
+    }
+
+    .choice-note {
+      margin-top: 24px;
+      color: var(--page-muted);
+      font-size: 12px;
+      line-height: 1.65;
+    }
+
+    .stage {
+      min-width: 0;
+      display: grid;
+      justify-items: center;
+    }
+
+    .phone {
+      position: relative;
+      width: min(390px, 100%);
+      height: min(780px, calc(100dvh - 48px));
+      min-height: 650px;
+      overflow: hidden;
+      border: 9px solid #252a27;
+      border-radius: 38px;
+      box-shadow: var(--shadow);
+      background: #f7f7f2;
+    }
+
+    .phone::before {
+      content: "";
+      position: absolute;
+      z-index: 20;
+      top: 9px;
+      left: 50%;
+      width: 78px;
+      height: 20px;
+      transform: translateX(-50%);
+      border-radius: 20px;
+      background: #252a27;
+      pointer-events: none;
+    }
+
+    .prototype {
+      display: none;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .prototype.active { display: block; }
+
+    .screen {
+      position: relative;
+      height: 100%;
+      overflow-y: auto;
+      scrollbar-width: none;
+    }
+
+    .screen::-webkit-scrollbar { display: none; }
+
+    .settings-button {
+      border: 0;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      min-height: 42px;
+      padding: 8px 0 8px 12px;
+      font-size: 13px;
+    }
+
+    .row-button {
+      width: 100%;
+      border: 0;
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .complete-button {
+      border: 0;
+      cursor: pointer;
+      font-weight: 750;
+      transition: transform 120ms ease, filter 120ms ease;
+    }
+
+    .complete-button:active { transform: scale(.98); }
+
+    .settings-sheet {
+      position: absolute;
+      z-index: 30;
+      inset: 0;
+      display: none;
+      align-items: flex-end;
+      padding: 16px;
+      background: rgba(18, 23, 20, .32);
+      backdrop-filter: blur(5px);
+    }
+
+    .settings-sheet.open { display: flex; }
+
+    .settings-content {
+      width: 100%;
+      padding: 22px;
+      border-radius: 22px;
+      background: #f6f7f3;
+      color: #242824;
+      box-shadow: 0 16px 48px rgba(16, 24, 19, .2);
+    }
+
+    .settings-content h3 { margin: 0 0 7px; font-size: 20px; }
+    .settings-content p { margin: 0 0 20px; color: #697069; font-size: 13px; }
+    .settings-content button {
+      width: 100%;
+      border: 0;
+      border-radius: 14px;
+      padding: 13px;
+      background: #dfe5e0;
+      color: #26302b;
+      cursor: pointer;
+    }
+
+    /* A: continuous training sheet */
+    .concept-a {
+      --a-bg: #f2f0ea;
+      --a-ink: #292825;
+      --a-muted: #716e67;
+      --a-accent: #9a604b;
+      --a-primary: #403e38;
+      --a-soft: #ede5df;
+      --a-line: #d6d1c7;
+      background: var(--a-bg);
+      color: var(--a-ink);
+    }
+
+    .concept-a .screen {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .a-head { padding: 42px 24px 16px; }
+
+    .a-headline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .a-head h2 { margin: 0 0 5px; font-size: 27px; letter-spacing: -.04em; }
+    .a-head p { margin: 0; color: var(--a-muted); font-size: 13px; }
+    .a-head .settings-button { color: var(--a-muted); }
+
+    .a-focus {
+      margin: 0 16px 18px;
+      padding: 20px;
+      border-radius: 20px;
+      background: var(--a-primary);
+      color: #f1f4ef;
+      box-shadow: 0 16px 34px rgba(64, 62, 56, .15);
+    }
+
+    .a-focus-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 18px;
+    }
+
+    .a-focus .label { color: #d8d1ca; font-size: 11px; }
+    .a-focus .current-name { margin-top: 4px; font-size: 22px; font-weight: 760; }
+    .a-focus .current-count { color: #d9aa98; font-size: 29px; line-height: 1; font-weight: 760; }
+
+    .a-metrics {
+      display: grid;
+      grid-template-columns: 1fr 1.15fr;
+      align-items: end;
+      gap: 22px;
+      margin-top: 24px;
+      padding-top: 18px;
+      border-top: 1px solid rgba(226, 237, 231, .18);
+    }
+
+    .a-timer strong {
+      display: block;
+      margin-top: 5px;
+      font-size: 32px;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .a-progress { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .a-progress i { height: 4px; border-radius: 4px; background: rgba(234, 241, 237, .22); }
+    .a-progress i.done { background: #d9aa98; }
+    .a-progress-copy { margin-top: 8px; color: #d8d1ca; font-size: 11px; }
+
+    .concept-a .complete-button {
+      width: 100%;
+      min-height: 56px;
+      border-radius: 14px;
+      background: var(--a-primary);
+      color: #f1f4ef;
+    }
+
+    .a-bottom {
+      flex: none;
+      padding: 12px 16px 16px;
+      background: var(--a-bg);
+      box-shadow: 0 -12px 28px rgba(56, 63, 58, .06);
+    }
+
+    .a-section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 24px 10px;
+    }
+
+    .a-section-title h3 { margin: 0; font-size: 15px; }
+    .a-section-title span { color: var(--a-muted); font-size: 12px; }
+
+    .a-list {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 0 24px 12px;
+      scrollbar-width: none;
+    }
+
+    .a-list::-webkit-scrollbar { display: none; }
+
+    .concept-a .exercise-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      min-height: 63px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--a-line);
+      background: transparent;
+    }
+
+    .concept-a .exercise-row:last-child { border-bottom: 0; }
+    .concept-a .exercise-row strong { display: block; font-size: 15px; }
+    .concept-a .exercise-row small { color: var(--a-muted); font-size: 12px; }
+    .concept-a .exercise-row .status { color: var(--a-muted); font-size: 12px; }
+    .concept-a .exercise-row.current .status { color: var(--a-accent); font-weight: 700; }
+    .concept-a .exercise-row.current strong { color: var(--a-accent); }
+
+    /* B: exercise focus */
+    .concept-b {
+      --b-bg: #f2f0ea;
+      --b-ink: #292825;
+      --b-muted: #716e67;
+      --b-accent: #9a604b;
+      --b-soft: #ede5df;
+      --b-deep: #403e38;
+      background: var(--b-bg);
+      color: var(--b-ink);
+    }
+
+    .concept-b .screen {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      padding-bottom: 86px;
+    }
+
+    .b-top {
+      padding: 44px 22px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .b-top span { color: var(--b-muted); font-size: 13px; }
+
+    .b-focus { padding: 4px 22px 24px; }
+    .b-focus .eyeline { margin-bottom: 10px; color: var(--b-accent); font-size: 12px; font-weight: 700; }
+    .b-focus h2 { margin: 0; font-size: 34px; line-height: 1.08; letter-spacing: -.055em; }
+
+    .b-measure {
+      margin-top: 22px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      overflow: hidden;
+      border-radius: 18px;
+      background: var(--b-deep);
+    }
+
+    .b-measure > div {
+      min-height: 96px;
+      padding: 17px;
+      color: #eef2ed;
+    }
+
+    .b-measure > div + div { border-left: 1px solid rgba(238, 242, 237, .16); }
+
+    .b-measure small { color: #b9c6c0; font-size: 11px; }
+    .b-measure strong { display: block; margin-top: 12px; font-size: 27px; line-height: 1; font-variant-numeric: tabular-nums; }
+    .b-measure .set-large { color: #d9aa98; }
+
+    .b-progress {
+      display: flex;
+      gap: 7px;
+      margin-top: 18px;
+    }
+
+    .b-progress i {
+      display: block;
+      width: 100%;
+      height: 5px;
+      border-radius: 5px;
+      background: #d5dcd7;
+    }
+
+    .b-progress i.done { background: var(--b-accent); }
+
+    .b-queue {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      margin: 0 12px;
+      padding: 20px 10px 8px;
+      border-radius: 24px 24px 0 0;
+      background: #fffdfc;
+      scrollbar-width: none;
+    }
+
+    .b-queue::-webkit-scrollbar { display: none; }
+
+    .b-queue-head { padding: 0 10px 10px; color: var(--b-muted); font-size: 12px; }
+
+    .concept-b .exercise-row {
+      display: grid;
+      grid-template-columns: 34px 1fr auto;
+      align-items: center;
+      gap: 8px;
+      min-height: 54px;
+      padding: 8px 10px;
+      border-radius: 14px;
+      background: transparent;
+    }
+
+    .concept-b .exercise-row.current { background: #f8f8f4; }
+    .concept-b .exercise-row .order { color: var(--b-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .concept-b .exercise-row strong { display: block; font-size: 14px; }
+    .concept-b .exercise-row small { color: var(--b-muted); font-size: 11px; }
+    .concept-b .exercise-row .status { color: var(--b-muted); font-size: 11px; }
+    .concept-b .exercise-row.current .status { color: var(--b-accent); font-weight: 700; }
+
+    .b-bottom {
+      position: absolute;
+      z-index: 10;
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+    }
+
+    .concept-b .complete-button {
+      width: 100%;
+      min-height: 62px;
+      border-radius: 19px;
+      background: var(--b-accent);
+      color: #fff8f4;
+      box-shadow: 0 12px 30px rgba(132, 53, 33, .2);
+    }
+
+    /* Original app baseline */
+    .concept-original {
+      --o-bg: #f2f0ea;
+      --o-surface: #fffdfc;
+      --o-ink: #292825;
+      --o-muted: #716e67;
+      --o-primary: #403e38;
+      --o-accent: #9a604b;
+      --o-timer: #ede5df;
+      --o-active: #f3ebe6;
+      --o-border: #d6d1c7;
+      --o-divider: #e6e1d8;
+      background: var(--o-bg);
+      color: var(--o-ink);
+    }
+
+    .concept-original .screen {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .o-head {
+      flex: none;
+      padding: 42px 20px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .o-head h2 { margin: 0 0 5px; font-size: 25px; letter-spacing: -.04em; }
+    .o-head p { margin: 0; color: var(--o-muted); font-size: 12px; }
+    .o-head .settings-button {
+      width: 44px;
+      height: 44px;
+      min-height: 44px;
+      padding: 0;
+      border-radius: 50%;
+      background: var(--o-primary);
+      color: #f5f3ee;
+      font-size: 11px;
+    }
+
+    .o-timer {
+      flex: none;
+      margin: 0 16px 10px;
+      padding: 14px 16px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: end;
+      border-radius: 14px;
+      background: var(--o-timer);
+    }
+
+    .o-timer small { display: block; color: var(--o-muted); font-size: 10px; }
+    .o-timer span { display: block; margin-top: 7px; color: var(--o-muted); font-size: 11px; }
+    .o-timer strong { display: block; font-size: 27px; line-height: 1; font-variant-numeric: tabular-nums; }
+    .o-timer .state { margin-top: 6px; color: var(--o-accent); text-align: right; }
+
+    .o-current {
+      flex: none;
+      margin: 0 16px 10px;
+      padding: 15px 16px;
+      border: 1px solid var(--o-border);
+      border-radius: 14px;
+      background: var(--o-surface);
+    }
+
+    .o-current-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+    .o-current .label { color: var(--o-muted); font-size: 10px; }
+    .o-current .current-name { margin-top: 5px; font-size: 18px; font-weight: 750; }
+    .o-current .current-count { color: var(--o-accent); font-size: 25px; font-weight: 760; }
+    .o-current .remaining { color: var(--o-muted); font-size: 10px; text-align: right; }
+    .o-current-copy { margin-top: 3px; color: var(--o-muted); font-size: 11px; }
+
+    .o-progress { display: flex; gap: 10px; margin-top: 13px; }
+    .o-progress i {
+      width: 11px;
+      height: 11px;
+      border: 1px solid var(--o-border);
+      border-radius: 50%;
+      background: transparent;
+    }
+    .o-progress i.done { border-color: var(--o-primary); background: var(--o-primary); }
+
+    .o-list-head {
+      flex: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 18px 8px;
+    }
+    .o-list-head h3 { margin: 0; font-size: 18px; }
+    .o-list-head span { color: var(--o-muted); font-size: 11px; }
+
+    .o-list {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      margin: 0 16px;
+      padding: 4px 14px;
+      border: 1px solid var(--o-border);
+      border-radius: 14px;
+      background: var(--o-surface);
+      scrollbar-width: none;
+    }
+    .o-list::-webkit-scrollbar { display: none; }
+
+    .concept-original .exercise-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      min-height: 52px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--o-divider);
+      background: transparent;
+    }
+    .concept-original .exercise-row:last-child { border-bottom: 0; }
+    .concept-original .exercise-row strong { display: block; font-size: 14px; }
+    .concept-original .exercise-row small { color: var(--o-muted); font-size: 10px; }
+    .concept-original .exercise-row .status { color: var(--o-muted); font-size: 10px; }
+    .concept-original .exercise-row.current { background: var(--o-active); }
+    .concept-original .exercise-row.current .status { color: var(--o-accent); font-weight: 700; }
+
+    .o-bottom { flex: none; padding: 12px 16px 16px; background: var(--o-bg); }
+    .concept-original .complete-button {
+      width: 100%;
+      min-height: 56px;
+      border-radius: 12px;
+      background: var(--o-primary);
+      color: #f6f4ef;
+    }
+
+    .integrated .o-current {
+      position: relative;
+      min-height: 132px;
+      margin: 0 16px 10px;
+      padding: 18px 132px 16px 16px;
+    }
+
+    .integrated .o-current-head { display: block; }
+    .integrated .current-timer {
+      position: absolute;
+      top: 50%;
+      right: 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      transform: translateY(-50%);
+      text-align: right;
+    }
+    .integrated .current-timer strong {
+      display: block;
+      font-size: 29px;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -.03em;
+    }
+    .integrated .current-timer small {
+      display: block;
+      margin-top: 7px;
+      color: var(--o-accent);
+      font-size: 10px;
+    }
+
+    .integrated .o-progress { margin-top: 20px; }
+
+    @media (max-width: 780px) {
+      .showcase {
+        padding: 28px 16px 40px;
+        grid-template-columns: 1fr;
+        align-items: start;
+        gap: 26px;
+      }
+
+      .brief h1 { max-width: none; font-size: 36px; }
+      .brief > p { margin: 14px 0 20px; }
+      .concept-nav { grid-template-columns: repeat(2, 1fr); border-top: 0; gap: 6px; }
+      .concept-tab {
+        min-height: 80px;
+        padding: 12px 10px;
+        border: 1px solid var(--page-line);
+        border-radius: 12px;
+      }
+      .concept-tab strong { font-size: 13px; }
+      .concept-tab span { display: none; }
+      .concept-tab[aria-selected="true"] { padding-left: 10px; border-color: var(--page-accent); }
+      .concept-tab[aria-selected="true"]::before { display: none; }
+      .choice-note { display: none; }
+      .phone { height: 760px; min-height: 620px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        transition-duration: .01ms !important;
+        animation-duration: .01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="showcase">
+    <section class="brief" aria-labelledby="page-title">
+      <h1 id="page-title">计时，回到当前动作里。</h1>
+      <p>删除独立计时栏和多余组数文字，只保留动作名称、计时和进度节点。</p>
+      <nav class="concept-nav" role="tablist" aria-label="设计方向">
+        <button class="concept-tab" type="button" role="tab" aria-selected="true" aria-controls="concept-a" data-target="concept-a">
+          <strong>当前动作一体化</strong>
+          <span>单卡承载动作、计时和组数进度</span>
+        </button>
+        <button class="concept-tab" type="button" role="tab" aria-selected="false" aria-controls="concept-original" data-target="concept-original">
+          <strong>当前原版</strong>
+          <span>现有 App 的布局与原始配色基准</span>
+        </button>
+      </nav>
+      <p class="choice-note">当前原版仍作为对照。新的方案只调整上方训练信息板块。</p>
+    </section>
+
+    <section class="stage" aria-label="交互式手机预览">
+      <div class="phone">
+        <article class="prototype concept-original integrated active" id="concept-a" role="tabpanel" data-prototype>
+          <div class="screen">
+            <header class="o-head">
+              <div><h2>四分化 · 练胸日</h2><p>8月26日 星期三</p></div>
+              <button class="settings-button" type="button" data-open-settings>设置</button>
+            </header>
+            <section class="o-current">
+              <div class="o-current-head">
+                <div><div class="label">当前动作</div><div class="current-name" data-current-name>哑铃斜推</div><div class="o-current-copy" data-set-copy>第1组 / 共4组</div></div>
+                <div class="current-timer"><strong data-time>13:30</strong><small>组间休息</small></div>
+              </div>
+              <div class="o-progress" data-progress></div>
+            </section>
+            <div class="o-list-head"><h3>本日项目</h3><span data-summary>5项 · 2项完成</span></div>
+            <div class="o-list" data-list></div>
+            <div class="o-bottom"><button class="complete-button" type="button" data-complete>完成第2组</button></div>
+          </div>
+          <div class="settings-sheet" data-settings><div class="settings-content"><h3>训练设置</h3><p>这里保留现有训练设置功能。</p><button type="button" data-close-settings>返回训练</button></div></div>
+        </article>
+
+        <article class="prototype concept-original" id="concept-original" role="tabpanel" data-prototype>
+          <div class="screen">
+            <header class="o-head">
+              <div><h2>今日训练</h2><p>8月26日 星期三</p></div>
+              <button class="settings-button" type="button" data-open-settings>设置</button>
+            </header>
+            <section class="o-timer">
+              <div><small>组间休息</small><span>胸日 / 第1天</span></div>
+              <div><strong data-time>13:30</strong><small class="state">正在计时</small></div>
+            </section>
+            <section class="o-current">
+              <div class="o-current-head">
+                <div><div class="label">当前动作</div><div class="current-name" data-current-name>哑铃斜推</div><div class="o-current-copy" data-set-copy>第1组 / 共4组</div></div>
+                <div><div class="current-count" data-remaining>3</div><div class="remaining">组剩余</div></div>
+              </div>
+              <div class="o-progress" data-progress></div>
+            </section>
+            <div class="o-list-head"><h3>本日项目</h3><span data-summary>5项 · 2项完成</span></div>
+            <div class="o-list" data-list></div>
+            <div class="o-bottom"><button class="complete-button" type="button" data-complete>完成第2组</button></div>
+          </div>
+          <div class="settings-sheet" data-settings><div class="settings-content"><h3>训练设置</h3><p>这里保留现有训练设置功能。</p><button type="button" data-close-settings>返回训练</button></div></div>
+        </article>
+
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const exerciseSeed = [
+      { name: '杠铃卧推', done: 4, target: 4 },
+      { name: '杠铃斜推', done: 4, target: 4 },
+      { name: '哑铃斜推', done: 1, target: 4 },
+      { name: '双杠臂屈伸', done: 0, target: 4 },
+      { name: '器械推胸', done: 0, target: 4 }
+    ];
+
+    const controllers = new Map();
+
+    function pad(value) { return String(value).padStart(2, '0'); }
+
+    function createController(root) {
+      const exercises = exerciseSeed.map(item => ({ ...item }));
+      let current = 2;
+      let seconds = 810;
+
+      const timeNodes = root.querySelectorAll('[data-time]');
+      const list = root.querySelector('[data-list]');
+      const currentNameNodes = root.querySelectorAll('[data-current-name]');
+      const currentCountNodes = root.querySelectorAll('[data-current-count]');
+      const remainingNodes = root.querySelectorAll('[data-remaining]');
+      const completeButton = root.querySelector('[data-complete]');
+      const summary = root.querySelector('[data-summary]');
+      const progress = root.querySelector('[data-progress]');
+      const settings = root.querySelector('[data-settings]');
+
+      function statusFor(item, index) {
+        if (item.done >= item.target) return '已完成';
+        if (index === current) return '进行中';
+        return '去训练';
+      }
+
+      function renderList() {
+        list.innerHTML = exercises.map((item, index) => `
+          <button class="row-button exercise-row ${index === current ? 'current' : ''}" type="button" data-index="${index}" ${item.done >= item.target ? 'disabled' : ''}>
+            ${root.classList.contains('concept-b') ? `<span class="order">${pad(index + 1)}</span>` : ''}
+            <span><strong>${item.name}</strong><small>${item.done} / ${item.target} 组</small></span>
+            <span class="status">${statusFor(item, index)}</span>
+          </button>
+        `).join('');
+
+        list.querySelectorAll('[data-index]').forEach(button => {
+          button.addEventListener('click', () => {
+            const index = Number(button.dataset.index);
+            if (exercises[index].done < exercises[index].target) {
+              current = index;
+              seconds = 0;
+              render();
+            }
+          });
+        });
+      }
+
+      function renderProgress() {
+        if (!progress) return;
+        const item = exercises[current];
+        progress.innerHTML = Array.from({ length: item.target }, (_, index) => `<i class="${index < item.done ? 'done' : ''}"></i>`).join('');
+      }
+
+      function render() {
+        const item = exercises[current];
+        const completed = exercises.filter(exercise => exercise.done >= exercise.target).length;
+        currentNameNodes.forEach(node => { node.textContent = item.name; });
+        currentCountNodes.forEach(node => { node.textContent = `${item.done}/${item.target}`; });
+        remainingNodes.forEach(node => { node.textContent = String(item.target - item.done); });
+        const nextLabel = item.done >= item.target ? '开始下一个项目' : `完成第${item.done + 1}组`;
+        completeButton.textContent = nextLabel;
+        const setCopy = root.querySelector('[data-set-copy]');
+        if (setCopy) {
+          setCopy.textContent = root.classList.contains('concept-original')
+            ? `第${item.done}组 / 共${item.target}组`
+            : item.done >= item.target
+              ? '当前动作已经完成'
+              : `下一次完成第${item.done + 1}组`;
+        }
+        summary.textContent = `${root.classList.contains('concept-b') ? '今日清单' : '5项'} · ${completed}项完成`;
+        renderList();
+        renderProgress();
+      }
+
+      function updateClock() {
+        seconds += 1;
+        const text = `${pad(Math.floor(seconds / 60))}:${pad(seconds % 60)}`;
+        timeNodes.forEach(node => { node.textContent = text; });
+      }
+
+      completeButton.addEventListener('click', () => {
+        const item = exercises[current];
+        if (item.done < item.target) {
+          item.done += 1;
+          seconds = 0;
+        } else {
+          const next = exercises.findIndex((exercise, index) => index > current && exercise.done < exercise.target);
+          const fallback = exercises.findIndex(exercise => exercise.done < exercise.target);
+          if (next >= 0 || fallback >= 0) current = next >= 0 ? next : fallback;
+          seconds = 0;
+        }
+        render();
+      });
+
+      root.querySelectorAll('[data-open-settings]').forEach(button => button.addEventListener('click', () => settings.classList.add('open')));
+      root.querySelector('[data-close-settings]').addEventListener('click', () => settings.classList.remove('open'));
+      settings.addEventListener('click', event => { if (event.target === settings) settings.classList.remove('open'); });
+
+      render();
+      const timer = setInterval(updateClock, 1000);
+      return { destroy: () => clearInterval(timer) };
+    }
+
+    document.querySelectorAll('[data-prototype]').forEach(root => controllers.set(root.id, createController(root)));
+
+    document.querySelectorAll('.concept-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.concept-tab').forEach(item => item.setAttribute('aria-selected', String(item === tab)));
+        document.querySelectorAll('.prototype').forEach(panel => panel.classList.toggle('active', panel.id === tab.dataset.target));
+        history.replaceState(null, '', `#${tab.dataset.target}`);
+      });
+    });
+
+    const initialTarget = location.hash.slice(1);
+    const initialTab = document.querySelector(`.concept-tab[data-target="${initialTarget}"]`);
+    if (initialTab) initialTab.click();
+  </script>
+</body>
+</html>
