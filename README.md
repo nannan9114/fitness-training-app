@@ -17,6 +17,19 @@
 
 > 上图是项目内设计原型生成的界面预览，实际安装包界面可能不同。训练时可集中查看当前动作、当前组和已休息时长。
 
+## 概要
+
+| 项目 | 内容 |
+|---|---|
+| 应用类型 | Flutter 健身训练与进度记录 App |
+| Android 包名 | `com.megumin.fitness_training_app` |
+| 最低 Android 版本 | Android 7.0（API 24，当前 Flutter 默认最低版本） |
+| Android 架构 | `armeabi-v7a` / `arm64-v8a` / `x86_64` |
+| 数据保存 | 训练计划与进度保存在本机；使用 SharedPreferences，无账号或自建后端依赖 |
+| 当前公开安装包 | Debug APK，用于测试，不是应用商店正式签名包 |
+
+> **APK 为什么比较大？** 当前公开包是未按处理器架构拆分的 Flutter Debug APK。它包含 Flutter 调试运行时及多种架构的原生库，且 Debug 构建没有 Release 构建的优化，因此单个文件会明显更大。这不是训练数据或 README 图片造成的。发布到 GitHub 可构建 Release APK 并按架构拆分（例如 `flutter build apk --release --split-per-abi`）；若要上 Google Play，通常使用 AAB。当前 Gradle 的 Release 签名仍使用 debug key，正式分发前还需配置自己的 release 签名。
+
 ## 它能做什么
 
 - **管理训练计划**：编辑训练日、动作名称和目标组数。
