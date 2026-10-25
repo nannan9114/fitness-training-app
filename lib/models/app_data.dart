@@ -1,7 +1,8 @@
 enum SplitId {
   three('three'),
   four('four'),
-  five('five');
+  five('five'),
+  custom('custom');
 
   const SplitId(this.value);
   final String value;
@@ -211,31 +212,109 @@ class AppData {
     required this.version,
     required this.plan,
     required this.currentSession,
+    this._activePlanId,
+    this._savedPlans = const [],
   });
 
-  static const currentVersion = 1;
+  static const currentVersion = 2;
   final int version;
   final TrainingPlan plan;
   final CurrentSession currentSession;
+  final String? _activePlanId;
+  final List<SavedPlan> _savedPlans;
 
-  factory AppData.fromJson(Map<String, Object?> json) => AppData(
-    version: _requiredInt(json, 'version'),
-    plan: TrainingPlan.fromJson(_jsonMap(json['plan'])),
-    currentSession: CurrentSession.fromJson(_jsonMap(json['currentSession'])),
-  );
+  String get activePlanId => _activePlanId ?? 'builtin_${plan.splitId.value}';
+
+  // The active snapshot is always derived from the current plan/session.
+  // Updating progress cannot accidentally leave its saved copy out of date.
+  List<SavedPlan> get savedPlans => List.unmodifiable([
+    for (final saved in _savedPlans)
+      if (saved.id == activePlanId)
+        SavedPlan(id: activePlanId, plan: plan, session: currentSession)
+      else
+        saved,
+    if (!_savedPlans.any((saved) => saved.id == activePlanId))
+      SavedPlan(id: activePlanId, plan: plan, session: currentSession),
+  ]);
+
+  factory AppData.fromJson(Map<String, Object?> json) {
+    final version = _requiredInt(json, 'version');
+    if (version == 1) {
+      final oldPlan = TrainingPlan.fromJson(_jsonMap(json['plan']));
+      return AppData(
+        version: currentVersion,
+        plan: TrainingPlan(
+          name: oldPlan.name == '练四休一' ? '四分化' : oldPlan.name,
+          splitId: oldPlan.splitId,
+          trainingDays: oldPlan.trainingDays,
+        ),
+        currentSession: CurrentSession.fromJson(
+          _jsonMap(json['currentSession']),
+        ),
+      );
+    }
+    if (version != currentVersion || json['savedPlans'] is! List) {
+      throw const FormatException('方案数据版本无效');
+    }
+    final plans = (json['savedPlans'] as List)
+        .map((item) => SavedPlan.fromJson(_jsonMap(item)))
+        .toList();
+    final activeId = _requiredString(json, 'activePlanId');
+    if (plans.map((item) => item.id).toSet().length != plans.length ||
+        !plans.any((item) => item.id == activeId)) {
+      throw const FormatException('当前方案无效');
+    }
+    final active = plans.firstWhere((item) => item.id == activeId);
+    return AppData(
+      version: currentVersion,
+      plan: active.plan,
+      currentSession: active.session,
+      activePlanId: activeId,
+      savedPlans: plans,
+    );
+  }
 
   Map<String, Object?> toJson() => {
     'version': version,
-    'plan': plan.toJson(),
-    'currentSession': currentSession.toJson(),
+    'activePlanId': activePlanId,
+    'savedPlans': savedPlans.map((item) => item.toJson()).toList(),
   };
 
-  AppData copyWith({TrainingPlan? plan, CurrentSession? currentSession}) =>
-      AppData(
-        version: version,
-        plan: plan ?? this.plan,
-        currentSession: currentSession ?? this.currentSession,
-      );
+  AppData copyWith({
+    TrainingPlan? plan,
+    CurrentSession? currentSession,
+    String? activePlanId,
+    List<SavedPlan>? savedPlans,
+  }) => AppData(
+    version: version,
+    plan: plan ?? this.plan,
+    currentSession: currentSession ?? this.currentSession,
+    activePlanId: activePlanId ?? this.activePlanId,
+    savedPlans: savedPlans ?? this.savedPlans,
+  );
+}
+
+class SavedPlan {
+  const SavedPlan({
+    required this.id,
+    required this.plan,
+    required this.session,
+  });
+  final String id;
+  final TrainingPlan plan;
+  final CurrentSession session;
+
+  factory SavedPlan.fromJson(Map<String, Object?> json) => SavedPlan(
+    id: _requiredString(json, 'id'),
+    plan: TrainingPlan.fromJson(_jsonMap(json['plan'])),
+    session: CurrentSession.fromJson(_jsonMap(json['session'])),
+  );
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'plan': plan.toJson(),
+    'session': session.toJson(),
+  };
 }
 
 Map<String, Object?> _jsonMap(Object? value) {

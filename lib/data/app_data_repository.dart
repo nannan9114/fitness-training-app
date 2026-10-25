@@ -39,18 +39,23 @@ class AppDataRepository {
       await save(initial);
       return initial;
     }
+    late AppData data;
+    var needsMigration = false;
     try {
       final decoded = jsonDecode(raw);
       if (decoded is! Map) {
         throw const FormatException('根数据无效');
       }
-      final data = AppData.fromJson(
+      if (decoded['version'] != 1 &&
+          decoded['version'] != AppData.currentVersion) {
+        throw const AppDataStorageException('数据版本不受支持，请使用匹配的应用版本');
+      }
+      needsMigration = decoded['version'] == 1;
+      data = AppData.fromJson(
         decoded.map((key, value) => MapEntry(key.toString(), value)),
       );
-      if (data.version != AppData.currentVersion) {
-        throw const FormatException('不支持的数据版本');
-      }
-      return data;
+    } on AppDataStorageException {
+      rethrow;
     } catch (_) {
       if (!await storage.writeBackup(raw)) {
         throw const AppDataStorageException('旧数据备份失败');
@@ -59,6 +64,14 @@ class AppDataRepository {
       await save(initial);
       return initial;
     }
+    if (needsMigration) {
+      // Never replace the user's only copy if backup or migration saving fails.
+      if (!await storage.writeBackup(raw)) {
+        throw const AppDataStorageException('升级前备份失败，请重试');
+      }
+      await save(data);
+    }
+    return data;
   }
 
   Future<void> save(AppData data) async {

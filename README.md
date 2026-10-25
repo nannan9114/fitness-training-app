@@ -6,7 +6,7 @@
 
 [![Flutter](https://img.shields.io/badge/Flutter-3.47-02569B?logo=flutter&logoColor=white)](https://flutter.dev/)
 [![Platform](https://img.shields.io/badge/Platform-Android-3DDC84?logo=android&logoColor=white)](#运行项目)
-[![Tests](https://img.shields.io/badge/Tests-16%20passed-2E7D32)](#质量验证)
+[![Tests](https://img.shields.io/badge/Tests-27%20passed-2E7D32)](#质量验证)
 [![Release](https://img.shields.io/github/v/release/nannan9114/fitness-training-app?label=Release)](https://github.com/nannan9114/fitness-training-app/releases/latest)
 
 [下载最新版 Debug APK](https://github.com/nannan9114/fitness-training-app/releases/latest/download/app-debug.apk) · [更新日志](CHANGELOG.md) · [查看源码](https://github.com/nannan9114/fitness-training-app)
@@ -32,9 +32,13 @@
 
 ## 它能做什么
 
-- **管理训练计划**：编辑训练日、动作名称和目标组数。
+- **训练计划**：选择、新建、复制和重命名分化，每套独立保存项目、顺序与进度。
+- **计划分享**：菜单中选择“分享”复制代码；在“新建计划”中粘贴导入。分享不含个人进度，导入或创建副本均独立保存。
+- **固定计划位置**：内置计划按三、四、五分化排列，新计划追加在后，切换和编辑不会改变位置。
+- **训练项目**：编辑当前方案或指定方案的动作名称和目标组数。
+- **训练顺序**：直接修改训练日名称，长按调整顺序，添加或删除训练日。
 - **长按拖动排序**：调整动作顺序；长按后卡片放大、显示阴影与描边，并提供提示和轻震反馈。
-- **三／四／五分化**：快速套用内置方案，也可以继续自定义。
+- **三／四／五分化**：内置方案可继续编辑；切换其他分化后再切回，修改仍保留。
 - **安排休息日**：在训练周期任意位置插入休息日并设置持续天数。
 - **记录完成进度**：完成一组后立即更新当前动作和整日进度。
 - **组间休息计时**：开始下一组前显示计时，并通过 Android 通知提醒。
@@ -57,9 +61,11 @@ flowchart LR
 
 ## 下载安装
 
-当前最新版本为 **1.0.1（build 2）**：[直接下载 Debug APK](https://github.com/nannan9114/fitness-training-app/releases/latest/download/app-debug.apk)（约 146.3 MiB），或前往 [Releases](https://github.com/nannan9114/fitness-training-app/releases/latest) 查看版本说明和校验文件。
+当前版本为 **1.1.2（build 5）**：[直接下载 Debug APK](https://github.com/nannan9114/fitness-training-app/releases/latest/download/app-debug.apk)（约 146.4 MiB），或前往 [Releases](https://github.com/nannan9114/fitness-training-app/releases/latest) 查看版本说明和校验文件。
 
-本次修复了延后完成训练时当天提前跳日的问题，并增强动作长按排序反馈。详细原因和验证范围见 [更新日志](CHANGELOG.md)。
+新版支持独立保存多套计划、固定计划顺序、创建副本和分享代码导入。请覆盖安装以保留本机记录。分享代码需要收发双方使用支持此功能的版本。历史版本只保留发布记录，安装包仅保留最新版。
+
+新版同时保留当天训练完成后不提前跳日的修复和动作长按排序反馈，删除重复的“使用中”标签。详细说明见 [更新日志](CHANGELOG.md)。
 
 当前公开包使用项目现有的 **debug 签名**，适合测试和覆盖安装此前由本项目生成、签名相同的 debug 版本；它不是应用商店正式签名包。
 
@@ -101,7 +107,9 @@ fitness-training-app/
 │  │  ├─ training_screen.dart        # 今日训练、完成组数与休息计时
 │  │  ├─ plan_editor_screen.dart     # 动作编辑、目标组数与拖动排序
 │  │  ├─ settings_screen.dart        # 设置入口
-│  │  ├─ split_settings_screen.dart  # 训练分化、顺序与休息日
+│  │  ├─ split_settings_screen.dart  # 分化选择、新建、复制和管理
+│  │  ├─ training_schedule_screen.dart # 训练日改名、顺序与休息日
+│  │  ├─ editor_helpers.dart         # 名称输入与未保存修改提示
 │  │  └─ reset_training_day_screen.dart # 单个训练日重置
 │  ├─ services/rest_timer_notification.dart # Flutter 与原生通知通信
 │  ├─ state/training_app_state.dart  # 状态管理与训练规则
@@ -142,20 +150,22 @@ flowchart TD
 
 ## 质量验证
 
-当前版本在发布前完成：
+1.1.2 版本已完成：
 
 ```text
 flutter analyze  → No issues found
-flutter test     → 16 tests passed
+flutter test     → 27 tests passed
 ```
 
 测试覆盖本地数据恢复、训练进度、计划编辑、动作排序及保存、训练日重置、休息日切换及主要页面交互；包含延后 1 天或 7 天完成训练、连续多轮训练、当天刷新和重新启动的回归检查。
+
+新增验证：多分化切换与重启恢复、复制方案独立性、未启用方案编辑、迁移备份和保存失败保护，以及新建分化、改训练日名称、添加休息日、编辑项目与未保存提示的页面流程。
 
 ## 当前版本
 
 | 项目 | 内容 |
 |---|---|
-| App 版本 | `1.0.1+2` |
-| 发布标签 | `v1.0.1-build.2` |
+| App 版本 | `1.1.2+5` |
+| GitHub 发布标签 | `v1.1.2-build.5` |
 | Android 包名 | `com.megumin.fitness_training_app` |
 | 数据方式 | 设备本地保存，无账号和服务器依赖 |

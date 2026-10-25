@@ -28,11 +28,30 @@ class TrainingAppState extends ChangeNotifier with WidgetsBindingObserver {
   bool _isLoading = true;
   bool _isSaving = false;
   String? _errorMessage;
+  int _planIdSeed = 0;
 
   AppData? get data => _data;
   bool get isLoading => _isLoading;
   bool get isSaving => _isSaving;
   String? get errorMessage => _errorMessage;
+
+  List<SavedPlan> get plans {
+    final stored = _data?.savedPlans ?? <SavedPlan>[];
+    return [
+      for (final split in [SplitId.three, SplitId.four, SplitId.five])
+        stored
+                .where((item) => item.id == 'builtin_${split.value}')
+                .firstOrNull ??
+            SavedPlan(
+              id: 'builtin_${split.value}',
+              plan: DefaultPlans.planFor(split),
+              session: DefaultPlans.create(splitId: split).currentSession,
+            ),
+      ...stored.where((item) => !item.id.startsWith('builtin_')),
+    ];
+  }
+
+  SavedPlan planById(String id) => plans.firstWhere((item) => item.id == id);
 
   TrainingDay? get currentDay {
     final value = _data;
@@ -101,8 +120,8 @@ class TrainingAppState extends ChangeNotifier with WidgetsBindingObserver {
       }
       _errorMessage = null;
     } catch (_) {
-      _data = DefaultPlans.create();
-      _errorMessage = '本地数据读取失败，请重试';
+      _data = null;
+      _errorMessage = '本地数据读取或升级失败，请重试';
     } finally {
       _isLoading = false;
       _syncTicker();
@@ -214,32 +233,227 @@ class TrainingAppState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<bool> saveTrainingPlan(TrainingPlan plan) async {
+    if (_data == null) return false;
+    return savePlan(_data!.activePlanId, plan);
+  }
+
+  Future<bool> savePlan(String id, TrainingPlan plan) async {
     final value = _data;
     if (value == null || _isSaving) {
       return false;
     }
-    final currentExerciseId = value.currentSession.currentExerciseId;
-    final currentDay = plan.trainingDays
-        .where((day) => day.id == value.currentSession.currentTrainingDayId)
+    final days = plan.trainingDays;
+    final exercises = days.expand((day) => day.exercises).toList();
+    if (plan.name.trim().isEmpty ||
+        days.isEmpty ||
+        !days.any((day) => !day.isRestDay) ||
+        days.map((day) => day.id).toSet().length != days.length ||
+        exercises.map((item) => item.id).toSet().length != exercises.length ||
+        days.any(
+          (day) =>
+              day.name.trim().isEmpty ||
+              (day.isRestDay
+                  ? day.restDurationDays < 1 || day.exercises.isNotEmpty
+                  : day.exercises.isEmpty),
+        ) ||
+        exercises.any(
+          (item) => item.name.trim().isEmpty || item.targetSets < 1,
+        )) {
+      _errorMessage = '请保留至少一个训练日，每个训练日至少一个项目，名称不能为空';
+      notifyListeners();
+      return false;
+    }
+    final previous = planById(id).session;
+    final day = days
+        .where((day) => day.id == previous.currentTrainingDayId)
         .firstOrNull;
-    if (currentDay == null ||
-        (currentExerciseId != null &&
-            !currentDay.exercises.any(
-              (item) => item.id == currentExerciseId,
-            ))) {
+    final currentExerciseId = previous.currentExerciseId;
+    if (id == value.activePlanId &&
+        (day == null ||
+            (currentExerciseId != null &&
+                !day.exercises.any((item) => item.id == currentExerciseId)))) {
       _errorMessage = '不能删除正在训练的项目或训练日';
       notifyListeners();
       return false;
     }
-    return _commit(value.copyWith(plan: plan));
+    CurrentSession session;
+    if (day == null) {
+      session = _sessionForDay(
+        days.firstWhere((day) => !day.isRestDay),
+        _todayKey(),
+        previous,
+      );
+    } else {
+      final allDone =
+          day.isRestDay ||
+          day.exercises.every(
+            (item) =>
+                (previous.completedSetsByExercise[item.id] ?? 0) >=
+                item.targetSets,
+          );
+      final current = day.exercises
+          .where((item) => item.id == currentExerciseId)
+          .firstOrNull;
+      final firstUnfinished = day.exercises
+          .where(
+            (item) =>
+                (previous.completedSetsByExercise[item.id] ?? 0) <
+                item.targetSets,
+          )
+          .firstOrNull;
+      session = CurrentSession(
+        currentTrainingDayId: day.id,
+        currentExerciseId: current?.id ?? firstUnfinished?.id,
+        completedSetsByExercise: previous.completedSetsByExercise,
+        restStartedAt: allDone ? null : previous.restStartedAt,
+        status: allDone ? SessionStatus.completed : SessionStatus.inProgress,
+        scheduleDayStartedOn:
+            allDone && previous.status != SessionStatus.completed
+            ? _todayKey()
+            : previous.scheduleDayStartedOn,
+      );
+    }
+    final updated = SavedPlan(id: id, plan: plan, session: session);
+    return _commit(
+      value.copyWith(
+        plan: id == value.activePlanId ? plan : null,
+        currentSession: id == value.activePlanId ? session : null,
+        savedPlans: [
+          for (final item in value.savedPlans)
+            if (item.id == id) updated else item,
+          if (!value.savedPlans.any((item) => item.id == id)) updated,
+        ],
+      ),
+    );
   }
 
-  Future<bool> applySplit(SplitId splitId) async {
-    if (_data == null || _isSaving) {
+  Future<bool> applySplit(SplitId splitId) =>
+      switchPlan('builtin_${splitId.value}');
+
+  CurrentSession _stopSessionTimer(CurrentSession session) => CurrentSession(
+    currentTrainingDayId: session.currentTrainingDayId,
+    currentExerciseId: session.currentExerciseId,
+    completedSetsByExercise: session.completedSetsByExercise,
+    restStartedAt: null,
+    status: session.status,
+    scheduleDayStartedOn: session.scheduleDayStartedOn,
+  );
+
+  Future<bool> switchPlan(String id) async {
+    final value = _data;
+    if (value == null || _isSaving) return false;
+    if (id == value.activePlanId) return true;
+    final target = planById(id);
+    final stored = [
+      for (final item in value.savedPlans)
+        if (item.id == id)
+          target
+        else
+          SavedPlan(
+            id: item.id,
+            plan: item.plan,
+            session: _stopSessionTimer(item.session),
+          ),
+      if (!value.savedPlans.any((item) => item.id == id)) target,
+    ];
+    return _commit(
+      _advanceScheduleForToday(
+        value.copyWith(
+          activePlanId: id,
+          plan: target.plan,
+          currentSession: _stopSessionTimer(target.session),
+          savedPlans: stored,
+        ),
+      ),
+    );
+  }
+
+  Future<String?> createPlan(
+    String name, {
+    String? sourceId,
+    TrainingPlan? importedPlan,
+  }) async {
+    final value = _data;
+    if (value == null || _isSaving || name.trim().isEmpty) return null;
+    final id =
+        'custom_${DateTime.now().microsecondsSinceEpoch}_${_planIdSeed++}';
+    final template =
+        importedPlan ?? (sourceId == null ? null : planById(sourceId).plan);
+    final days = template == null
+        ? [
+            TrainingDay(
+              id: '${id}_day_0',
+              name: '训练日1',
+              order: 0,
+              exercises: [
+                Exercise(
+                  id: '${id}_exercise_0',
+                  name: '新项目',
+                  targetSets: 4,
+                  order: 0,
+                ),
+              ],
+            ),
+          ]
+        : [
+            for (var i = 0; i < template.trainingDays.length; i++)
+              TrainingDay(
+                id: '${id}_day_$i',
+                name: template.trainingDays[i].name,
+                order: i,
+                isRestDay: template.trainingDays[i].isRestDay,
+                restDurationDays: template.trainingDays[i].restDurationDays,
+                exercises: [
+                  for (
+                    var j = 0;
+                    j < template.trainingDays[i].exercises.length;
+                    j++
+                  )
+                    Exercise(
+                      id: '${id}_exercise_${i}_$j',
+                      name: template.trainingDays[i].exercises[j].name,
+                      targetSets:
+                          template.trainingDays[i].exercises[j].targetSets,
+                      order: j,
+                    ),
+                ],
+              ),
+          ];
+    final first = days.firstWhere((day) => !day.isRestDay);
+    final plan = TrainingPlan(
+      name: name.trim(),
+      splitId: SplitId.custom,
+      trainingDays: days,
+    );
+    final saved = SavedPlan(
+      id: id,
+      plan: plan,
+      session: CurrentSession(
+        currentTrainingDayId: first.id,
+        currentExerciseId: first.exercises.first.id,
+        completedSetsByExercise: const {},
+        restStartedAt: null,
+        status: SessionStatus.inProgress,
+      ),
+    );
+    final success = await _commit(
+      value.copyWith(savedPlans: [...value.savedPlans, saved]),
+    );
+    return success ? id : null;
+  }
+
+  Future<bool> deletePlan(String id) async {
+    final value = _data;
+    if (value == null ||
+        _isSaving ||
+        id == value.activePlanId ||
+        id.startsWith('builtin_')) {
       return false;
     }
     return _commit(
-      DefaultPlans.create(splitId: splitId, scheduleDayStartedOn: _todayKey()),
+      value.copyWith(
+        savedPlans: value.savedPlans.where((item) => item.id != id).toList(),
+      ),
     );
   }
 

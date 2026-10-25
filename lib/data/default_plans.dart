@@ -28,6 +28,7 @@ class DefaultPlans {
       SplitId.three => _threeDay,
       SplitId.four => _fourDay,
       SplitId.five => _fiveDay,
+      SplitId.custom => throw ArgumentError('自定义方案没有默认模板'),
     };
     return TrainingPlan(
       name: template.planName,
@@ -75,7 +76,7 @@ const _threeDay = _PlanTemplate('三分化', [
   _DayTemplate('腿', ['深蹲', '腿伸展', '内侧肌', '外侧肌']),
 ]);
 
-const _fourDay = _PlanTemplate('练四休一', [
+const _fourDay = _PlanTemplate('四分化', [
   _DayTemplate('胸', ['杠铃卧推', '杠铃斜推', '哑铃斜推', '双杆臂屈伸', '器械推胸']),
   _DayTemplate('背', ['引体向上', '高位下拉', '坐姿划船', '哑铃划船', '直臂下压']),
   _DayTemplate('肩', ['杠铃肩推', '哑铃肩推', '哑铃侧平举', '器械侧平举', '器械飞鸟']),

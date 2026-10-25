@@ -5,9 +5,11 @@ import 'package:provider/provider.dart';
 import '../models/app_data.dart';
 import '../state/training_app_state.dart';
 import '../theme/app_theme.dart';
+import 'editor_helpers.dart';
 
 class PlanEditorScreen extends StatefulWidget {
-  const PlanEditorScreen({super.key});
+  const PlanEditorScreen({super.key, this.planId});
+  final String? planId;
 
   @override
   State<PlanEditorScreen> createState() => _PlanEditorScreenState();
@@ -19,6 +21,8 @@ class _PlanEditorScreenState extends State<PlanEditorScreen> {
   var _idSeed = 0;
   bool _initialized = false;
   bool _isDragging = false;
+  bool _dirty = false;
+  late String _planId;
 
   Widget _dragProxy(Widget child, int index, Animation<double> animation) {
     return AnimatedBuilder(
@@ -74,9 +78,10 @@ class _PlanEditorScreenState extends State<PlanEditorScreen> {
     if (_initialized) {
       return;
     }
-    _days = context
-        .read<TrainingAppState>()
-        .data!
+    final state = context.read<TrainingAppState>();
+    _planId = widget.planId ?? state.data!.activePlanId;
+    _days = state
+        .planById(_planId)
         .plan
         .trainingDays
         .where((day) => !day.isRestDay)
@@ -95,6 +100,7 @@ class _PlanEditorScreenState extends State<PlanEditorScreen> {
   TrainingDay get _selectedDay => _days[_selectedDayIndex];
 
   void _replaceExercises(List<Exercise> exercises) {
+    _dirty = true;
     final day = _selectedDay;
     _days[_selectedDayIndex] = TrainingDay(
       id: day.id,
@@ -161,20 +167,20 @@ class _PlanEditorScreenState extends State<PlanEditorScreen> {
     setState(() => _replaceExercises(reordered));
   }
 
-  Future<void> _save() async {
+  Future<bool> _save() async {
     FocusManager.instance.primaryFocus?.unfocus();
     if (_days.any((day) => day.exercises.isEmpty)) {
       _showMessage('每个训练日至少保留一个项目');
-      return;
+      return false;
     }
     if (_days.any(
       (day) => day.exercises.any((item) => item.name.trim().isEmpty),
     )) {
       _showMessage('项目名称不能为空');
-      return;
+      return false;
     }
     final state = context.read<TrainingAppState>();
-    final oldPlan = state.data!.plan;
+    final oldPlan = state.planById(_planId).plan;
     final normalizedTrainingDays = [
       for (final day in _days)
         TrainingDay(
@@ -197,7 +203,8 @@ class _PlanEditorScreenState extends State<PlanEditorScreen> {
       for (final day in oldPlan.trainingDays)
         if (day.isRestDay) day else editedById[day.id]!,
     ];
-    final success = await state.saveTrainingPlan(
+    final success = await state.savePlan(
+      _planId,
       TrainingPlan(
         name: oldPlan.name,
         splitId: oldPlan.splitId,
@@ -205,15 +212,14 @@ class _PlanEditorScreenState extends State<PlanEditorScreen> {
       ),
     );
     if (!mounted) {
-      return;
+      return success;
     }
     if (success) {
-      final messenger = ScaffoldMessenger.of(context);
-      Navigator.pop(context);
-      messenger.showSnackBar(const SnackBar(content: Text('训练计划已保存')));
+      setState(() => _dirty = false);
     } else {
       _showMessage(state.errorMessage ?? '保存失败，请重试');
     }
+    return success;
   }
 
   void _showMessage(String message) {
@@ -224,137 +230,155 @@ class _PlanEditorScreenState extends State<PlanEditorScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<TrainingAppState>();
-    final activeExerciseId = state.data!.currentSession.currentExerciseId;
-    return Scaffold(
-      appBar: AppBar(title: const Text('训练计划')),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: CustomScrollView(
-                slivers: [
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                    sliver: SliverToBoxAdapter(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '选择训练日',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          const SizedBox(height: 12),
-                          GridView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 2,
-                                  mainAxisExtent: 48,
-                                  crossAxisSpacing: 10,
-                                  mainAxisSpacing: 10,
-                                ),
-                            itemCount: _days.length,
-                            itemBuilder: (context, index) {
-                              final selected = index == _selectedDayIndex;
-                              return OutlinedButton(
-                                onPressed: () =>
-                                    setState(() => _selectedDayIndex = index),
-                                style: OutlinedButton.styleFrom(
-                                  backgroundColor: selected
-                                      ? AppColors.primary
-                                      : AppColors.surface,
-                                  foregroundColor: selected
-                                      ? Colors.white
-                                      : AppColors.primaryText,
-                                  side: const BorderSide(
-                                    color: AppColors.border,
+    final activeExerciseId = _planId == state.data!.activePlanId
+        ? state.data!.currentSession.currentExerciseId
+        : null;
+    return EditorBackGuard(
+      dirty: _dirty,
+      onSave: _save,
+      child: Scaffold(
+        appBar: AppBar(title: const Text('训练项目')),
+        body: SafeArea(
+          child: Column(
+            children: [
+              Expanded(
+                child: CustomScrollView(
+                  slivers: [
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      sliver: SliverToBoxAdapter(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${state.planById(_planId).plan.name} · 选择训练日',
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                            const SizedBox(height: 12),
+                            GridView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              gridDelegate:
+                                  const SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: 2,
+                                    mainAxisExtent: 48,
+                                    crossAxisSpacing: 10,
+                                    mainAxisSpacing: 10,
+                                  ),
+                              itemCount: _days.length,
+                              itemBuilder: (context, index) {
+                                final selected = index == _selectedDayIndex;
+                                return OutlinedButton(
+                                  onPressed: () =>
+                                      setState(() => _selectedDayIndex = index),
+                                  style: OutlinedButton.styleFrom(
+                                    backgroundColor: selected
+                                        ? AppColors.primary
+                                        : AppColors.surface,
+                                    foregroundColor: selected
+                                        ? Colors.white
+                                        : AppColors.primaryText,
+                                    side: const BorderSide(
+                                      color: AppColors.border,
+                                    ),
+                                  ),
+                                  child: Text(_days[index].name),
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 24),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    '${_selectedDay.name} · 项目',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleLarge,
                                   ),
                                 ),
-                                child: Text('${_days[index].name}日'),
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 24),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  '${_selectedDay.name}日项目',
-                                  style: Theme.of(context).textTheme.titleLarge,
-                                ),
-                              ),
-                              Text('${_selectedDay.exercises.length} 项'),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _isDragging ? '已选中项目，上下拖动后松手放置' : '长按项目卡片并上下拖动排序',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                          const SizedBox(height: 10),
-                        ],
-                      ),
-                    ),
-                  ),
-                  SliverPadding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    sliver: SliverReorderableList(
-                      itemCount: _selectedDay.exercises.length,
-                      onReorderItem: _reorderExercises,
-                      onReorderStart: (_) {
-                        FocusManager.instance.primaryFocus?.unfocus();
-                        HapticFeedback.selectionClick();
-                        setState(() => _isDragging = true);
-                      },
-                      onReorderEnd: (_) => setState(() => _isDragging = false),
-                      proxyDecorator: _dragProxy,
-                      itemBuilder: (context, index) {
-                        final exercise = _selectedDay.exercises[index];
-                        return ReorderableDelayedDragStartListener(
-                          key: ValueKey(exercise.id),
-                          index: index,
-                          child: Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: _ExerciseEditor(
-                              exercise: exercise,
-                              isActive: exercise.id == activeExerciseId,
-                              canDelete:
-                                  _selectedDay.exercises.length > 1 &&
-                                  exercise.id != activeExerciseId,
-                              onNameChanged: (value) =>
-                                  _updateExercise(index, name: value),
-                              onSetsChanged: (value) => setState(
-                                () => _updateExercise(index, targetSets: value),
-                              ),
-                              onDelete: () => _deleteExercise(index),
+                                Text('${_selectedDay.exercises.length} 项'),
+                              ],
                             ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-                    sliver: SliverToBoxAdapter(
-                      child: OutlinedButton.icon(
-                        onPressed: _addExercise,
-                        icon: const Icon(Icons.add_rounded),
-                        label: const Text('添加项目'),
+                            const SizedBox(height: 4),
+                            Text(
+                              _isDragging ? '已选中项目，上下拖动后松手放置' : '长按项目卡片并上下拖动排序',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            const SizedBox(height: 10),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      sliver: SliverReorderableList(
+                        itemCount: _selectedDay.exercises.length,
+                        onReorderItem: _reorderExercises,
+                        onReorderStart: (_) {
+                          FocusManager.instance.primaryFocus?.unfocus();
+                          HapticFeedback.selectionClick();
+                          setState(() => _isDragging = true);
+                        },
+                        onReorderEnd: (_) =>
+                            setState(() => _isDragging = false),
+                        proxyDecorator: _dragProxy,
+                        itemBuilder: (context, index) {
+                          final exercise = _selectedDay.exercises[index];
+                          return ReorderableDelayedDragStartListener(
+                            key: ValueKey(exercise.id),
+                            index: index,
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: _ExerciseEditor(
+                                exercise: exercise,
+                                isActive: exercise.id == activeExerciseId,
+                                canDelete:
+                                    _selectedDay.exercises.length > 1 &&
+                                    exercise.id != activeExerciseId,
+                                onNameChanged: (value) => setState(
+                                  () => _updateExercise(index, name: value),
+                                ),
+                                onSetsChanged: (value) => setState(
+                                  () =>
+                                      _updateExercise(index, targetSets: value),
+                                ),
+                                onDelete: () => _deleteExercise(index),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+                      sliver: SliverToBoxAdapter(
+                        child: OutlinedButton.icon(
+                          onPressed: _addExercise,
+                          icon: const Icon(Icons.add_rounded),
+                          label: const Text('添加项目'),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-              child: FilledButton(
-                onPressed: state.isSaving ? null : _save,
-                child: const Text('保存训练计划'),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+                child: FilledButton(
+                  onPressed: state.isSaving
+                      ? null
+                      : () async {
+                          if (await _save() && mounted) {
+                            await WidgetsBinding.instance.endOfFrame;
+                            if (context.mounted) Navigator.pop(context);
+                          }
+                        },
+                  child: const Text('保存修改'),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

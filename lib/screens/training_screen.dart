@@ -15,6 +15,22 @@ class TrainingScreen extends StatelessWidget {
     if (state.isLoading) {
       return const _LoadingScreen();
     }
+    if (state.data == null) {
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(state.errorMessage ?? '读取失败'),
+              FilledButton(
+                onPressed: state.initialize,
+                child: const Text('重试'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     final day = state.currentDay;
     final exercise = state.currentExercise;
     return Scaffold(
@@ -452,11 +468,7 @@ String _trainingTitle(BuildContext context, TrainingDay? day) {
   if (plan == null || day == null) {
     return '今日训练';
   }
-  final split = switch (plan.splitId) {
-    SplitId.three => '三分化',
-    SplitId.four => '四分化',
-    SplitId.five => '五分化',
-  };
+  final split = plan.name;
   final dayName = _trainingDayName(day.name);
   if (day.isRestDay) {
     return '$split · 休息日';

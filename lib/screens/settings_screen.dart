@@ -19,15 +19,15 @@ class SettingsScreen extends StatelessWidget {
           const SizedBox(height: 24),
           _SettingsTile(
             icon: Icons.edit_note_rounded,
-            title: '训练计划',
+            title: '训练项目',
             subtitle: '编辑每日动作与目标组数',
             onTap: () => Navigator.pushNamed(context, AppRoutes.planEditor),
           ),
           const SizedBox(height: 12),
           _SettingsTile(
             icon: Icons.view_week_outlined,
-            title: '训练分化与顺序',
-            subtitle: '选择三、四、五分化并调整训练顺序',
+            title: '训练计划',
+            subtitle: '切换、新建或分享计划，编辑训练日和顺序',
             onTap: () => Navigator.pushNamed(context, AppRoutes.splitSettings),
           ),
           const SizedBox(height: 12),

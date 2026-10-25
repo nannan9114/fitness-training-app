@@ -1,412 +1,338 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../data/plan_share_code.dart';
 import '../models/app_data.dart';
 import '../state/training_app_state.dart';
-import '../theme/app_theme.dart';
+import 'editor_helpers.dart';
+import 'training_schedule_screen.dart';
 
-class SplitSettingsScreen extends StatefulWidget {
+class SplitSettingsScreen extends StatelessWidget {
   const SplitSettingsScreen({super.key});
 
-  @override
-  State<SplitSettingsScreen> createState() => _SplitSettingsScreenState();
-}
-
-class _SplitSettingsScreenState extends State<SplitSettingsScreen> {
-  late SplitId _selectedSplit;
-  late List<TrainingDay> _schedule;
-  bool _initialized = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_initialized) {
-      return;
-    }
-    final plan = context.read<TrainingAppState>().data!.plan;
-    _selectedSplit = plan.splitId;
-    _schedule = List.of(plan.trainingDays);
-    _initialized = true;
+  void _edit(BuildContext context, String id) {
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => TrainingScheduleScreen(planId: id),
+      ),
+    );
   }
 
-  Future<void> _applySplit() async {
-    final confirmed = await showDialog<bool>(
+  Future<void> _create(BuildContext context, {SavedPlan? source}) async {
+    final state = context.read<TrainingAppState>();
+    var name = source == null ? '' : '${source.plan.name}副本';
+    var code = '';
+    String? error;
+    final result = await showDialog<(String, TrainingPlan?)>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('应用分化方案？'),
-        content: Text(
-          '将重新载入${_splitLabel(_selectedSplit)}默认动作，并清空当前训练进度及休息计时。',
-        ),
-        actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
-        actions: [
-          SizedBox(
-            width: double.infinity,
-            child: Row(
+      builder: (context) => StatefulBuilder(
+        builder: (context, update) => AlertDialog(
+          title: Text(source == null ? '新建计划' : '创建副本'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: FilledButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    child: const Text('确认应用'),
+                TextFormField(
+                  initialValue: name,
+                  autofocus: true,
+                  maxLength: 30,
+                  decoration: const InputDecoration(
+                    labelText: '名称',
+                    hintText: '例如：上下肢',
                   ),
+                  onChanged: (text) => update(() => name = text.trim()),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(context, false),
-                    child: const Text('取消'),
+                const SizedBox(height: 12),
+                if (source == null)
+                  TextFormField(
+                    minLines: 3,
+                    maxLines: 5,
+                    maxLength: 262144,
+                    decoration: InputDecoration(
+                      labelText: '粘贴分享代码（可选）',
+                      helperText: '留空创建空白计划；粘贴代码导入计划。',
+                      helperMaxLines: 2,
+                      counterText: '',
+                      errorText: error,
+                      errorMaxLines: 3,
+                    ),
+                    onChanged: (text) => update(() {
+                      code = text;
+                      error = null;
+                    }),
                   ),
-                ),
               ],
             ),
           ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) {
-      return;
-    }
-    final state = context.read<TrainingAppState>();
-    final messenger = ScaffoldMessenger.of(context);
-    final success = await state.applySplit(_selectedSplit);
-    if (!mounted) {
-      return;
-    }
-    if (success) {
-      Navigator.pop(context);
-      messenger.showSnackBar(const SnackBar(content: Text('分化方案已应用')));
-    } else {
-      messenger.showSnackBar(
-        SnackBar(content: Text(state.errorMessage ?? '保存失败，请重试')),
-      );
-    }
-  }
-
-  Future<void> _saveSchedule() async {
-    final state = context.read<TrainingAppState>();
-    final success = await state.saveTrainingSchedule(_schedule);
-    if (!mounted) {
-      return;
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(success ? '训练安排已保存' : state.errorMessage ?? '保存失败，请重试'),
-      ),
-    );
-  }
-
-  void _move(int index, int offset) {
-    final target = index + offset;
-    if (target < 0 || target >= _schedule.length) {
-      return;
-    }
-    setState(() {
-      final item = _schedule.removeAt(index);
-      _schedule.insert(target, item);
-    });
-  }
-
-  Future<void> _insertRestDay() async {
-    var duration = 1;
-    var insertIndex = _schedule.length;
-    final result = await showDialog<(int, int)>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('插入休息日'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('休息时长'),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  IconButton(
-                    onPressed: duration == 1
-                        ? null
-                        : () => setDialogState(() => duration--),
-                    icon: const Icon(Icons.remove_circle_outline_rounded),
-                  ),
-                  Expanded(
-                    child: Text(
-                      '$duration 天',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: duration == 30
-                        ? null
-                        : () => setDialogState(() => duration++),
-                    icon: const Icon(Icons.add_circle_outline_rounded),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<int>(
-                initialValue: insertIndex,
-                decoration: const InputDecoration(labelText: '插入位置'),
-                items: [
-                  const DropdownMenuItem(value: 0, child: Text('最前面')),
-                  for (var index = 0; index < _schedule.length; index++)
-                    DropdownMenuItem(
-                      value: index + 1,
-                      child: Text('在${_scheduleLabel(_schedule[index])}之后'),
-                    ),
-                ],
-                onChanged: (value) =>
-                    setDialogState(() => insertIndex = value ?? insertIndex),
-              ),
-            ],
-          ),
-          actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
           actions: [
-            SizedBox(
-              width: double.infinity,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: () =>
-                          Navigator.pop(context, (duration, insertIndex)),
-                      child: const Text('确认插入'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('取消'),
-                    ),
-                  ),
-                ],
-              ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: name.isEmpty && code.trim().isEmpty
+                  ? null
+                  : () {
+                      TrainingPlan? imported;
+                      if (source == null && code.trim().isNotEmpty) {
+                        try {
+                          imported = PlanShareCode.decode(code);
+                        } on FormatException catch (e) {
+                          update(() => error = e.message);
+                          return;
+                        }
+                      }
+                      Navigator.pop(context, (
+                        name.isEmpty ? imported!.name : name,
+                        imported,
+                      ));
+                    },
+              child: const Text('创建'),
             ),
           ],
         ),
       ),
     );
-    if (result == null || !mounted) {
-      return;
+    if (result == null || !context.mounted) return;
+    final id = await state.createPlan(
+      result.$1,
+      sourceId: source?.id,
+      importedPlan: result.$2,
+    );
+    if (!context.mounted) return;
+    if (id != null) {
+      _edit(context, id);
+    } else {
+      _message(context, state.errorMessage ?? '创建失败，请重试');
     }
-    setState(() {
-      _schedule.insert(
-        result.$2,
-        TrainingDay(
-          id: 'rest_${DateTime.now().microsecondsSinceEpoch}',
-          name: '休息',
-          order: result.$2,
-          exercises: const [],
-          isRestDay: true,
-          restDurationDays: result.$1,
-        ),
-      );
-    });
   }
 
-  void _changeRestDuration(int index, int offset) {
-    final day = _schedule[index];
-    final duration = (day.restDurationDays + offset).clamp(1, 30);
-    setState(() {
-      _schedule[index] = TrainingDay(
-        id: day.id,
-        name: day.name,
-        order: day.order,
-        exercises: day.exercises,
-        isRestDay: true,
-        restDurationDays: duration,
+  void _message(BuildContext context, String text) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+
+  Future<void> _share(BuildContext context, SavedPlan saved) async {
+    final pageContext = context;
+    final code = PlanShareCode.encode(saved.plan);
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('分享${saved.plan.name}'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('复制代码发给对方，在「新建计划」中粘贴即可导入。仅分享项目和安排，不含训练进度。'),
+                const SizedBox(height: 16),
+                SelectableText(code, style: const TextStyle(fontSize: 12)),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('关闭'),
+          ),
+          FilledButton.icon(
+            icon: const Icon(Icons.copy),
+            label: const Text('复制分享代码'),
+            onPressed: () async {
+              try {
+                await Clipboard.setData(ClipboardData(text: code));
+                if (context.mounted) Navigator.pop(context);
+                if (pageContext.mounted) _message(pageContext, '分享代码已复制');
+              } catch (_) {
+                if (context.mounted) _message(context, '复制失败，请长按代码手动复制');
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _menu(
+    BuildContext context,
+    SavedPlan saved,
+    String action,
+  ) async {
+    final state = context.read<TrainingAppState>();
+    if (action == 'share') {
+      await _share(context, saved);
+      return;
+    }
+    if (action == 'copy') {
+      await _create(context, source: saved);
+      return;
+    }
+    if (action == 'rename') {
+      final name = await requestName(context, '计划名称', saved.plan.name);
+      if (name == null || !context.mounted) return;
+      final success = await state.savePlan(
+        saved.id,
+        TrainingPlan(
+          name: name,
+          splitId: saved.plan.splitId,
+          trainingDays: saved.plan.trainingDays,
+        ),
       );
-    });
+      if (context.mounted && !success) {
+        _message(context, state.errorMessage ?? '保存失败');
+      }
+    } else if (action == 'delete') {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('删除${saved.plan.name}？'),
+          content: const Text('将删除这套方案的训练项目、顺序和进度。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('删除'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !context.mounted) return;
+      final success = await state.deletePlan(saved.id);
+      if (context.mounted && !success) {
+        _message(context, state.errorMessage ?? '请先切换到其他方案');
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<TrainingAppState>();
     return Scaffold(
-      appBar: AppBar(title: const Text('训练分化与顺序')),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-          children: [
-            Text('内置分化', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 6),
-            const Text('应用方案会恢复该方案的默认动作。'),
-            const SizedBox(height: 14),
-            for (final split in SplitId.values)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: _SplitOption(
-                  split: split,
-                  selected: split == _selectedSplit,
-                  onTap: () => setState(() => _selectedSplit = split),
-                ),
-              ),
-            FilledButton(
-              onPressed: state.isSaving ? null : _applySplit,
-              child: const Text('应用分化方案'),
-            ),
-            const SizedBox(height: 30),
-            Text('当前训练安排', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 6),
-            const Text('可调整顺序，并在任意位置插入自定义时长的休息日。'),
-            const SizedBox(height: 12),
-            for (var index = 0; index < _schedule.length; index++)
-              Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  border: Border.all(color: AppColors.border),
-                  borderRadius: BorderRadius.circular(12),
-                ),
+      appBar: AppBar(
+        title: const Text('训练计划'),
+        actions: [
+          IconButton(
+            tooltip: '新建计划',
+            onPressed: state.isSaving ? null : () => _create(context),
+            icon: const Icon(Icons.add_rounded),
+          ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Text('每个计划独立保存训练项目、顺序和进度。'),
+          const SizedBox(height: 16),
+          for (final saved in state.plans)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        CircleAvatar(
-                          radius: 15,
-                          backgroundColor: AppColors.completedSurface,
-                          foregroundColor: AppColors.primaryText,
-                          child: Text('${index + 1}'),
-                        ),
-                        const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            _scheduleLabel(_schedule[index]),
-                            style: const TextStyle(fontWeight: FontWeight.w700),
+                            saved.plan.name,
+                            style: Theme.of(context).textTheme.titleLarge,
                           ),
                         ),
-                        if (_schedule[index].isRestDay)
-                          IconButton(
-                            tooltip: '删除休息日',
-                            onPressed: () =>
-                                setState(() => _schedule.removeAt(index)),
-                            icon: const Icon(Icons.delete_outline_rounded),
-                          ),
-                        IconButton(
-                          tooltip: '上移',
-                          onPressed: index == 0 ? null : () => _move(index, -1),
-                          icon: const Icon(Icons.keyboard_arrow_up_rounded),
-                        ),
-                        IconButton(
-                          tooltip: '下移',
-                          onPressed: index == _schedule.length - 1
-                              ? null
-                              : () => _move(index, 1),
-                          icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                        PopupMenuButton<String>(
+                          tooltip: '${saved.plan.name}选项',
+                          enabled: !state.isSaving,
+                          onSelected: (action) => _menu(context, saved, action),
+                          itemBuilder: (_) => [
+                            const PopupMenuItem(
+                              value: 'rename',
+                              child: Text('重命名'),
+                            ),
+                            const PopupMenuItem(
+                              value: 'copy',
+                              child: Text('创建副本'),
+                            ),
+                            const PopupMenuItem(
+                              value: 'share',
+                              child: Text('分享'),
+                            ),
+                            if (!saved.id.startsWith('builtin_'))
+                              PopupMenuItem(
+                                value: 'delete',
+                                enabled: saved.id != state.data!.activePlanId,
+                                child: const Text('删除'),
+                              ),
+                          ],
                         ),
                       ],
                     ),
-                    if (_schedule[index].isRestDay)
-                      Row(
-                        children: [
-                          const SizedBox(width: 42),
-                          const Expanded(child: Text('连续休息时长')),
-                          IconButton(
-                            tooltip: '减少一天',
-                            onPressed: _schedule[index].restDurationDays == 1
+                    const SizedBox(height: 8),
+                    Text(
+                      saved.plan.trainingDays
+                          .map(
+                            (day) => day.isRestDay
+                                ? '休息${day.restDurationDays}天'
+                                : day.name,
+                          )
+                          .join(' → '),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: state.isSaving
                                 ? null
-                                : () => _changeRestDuration(index, -1),
-                            icon: const Icon(Icons.remove_rounded),
+                                : () => _edit(context, saved.id),
+                            child: const Text('编辑'),
                           ),
-                          SizedBox(
-                            width: 42,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed:
+                                state.isSaving ||
+                                    saved.id == state.data!.activePlanId
+                                ? null
+                                : () async {
+                                    final success = await state.switchPlan(
+                                      saved.id,
+                                    );
+                                    if (context.mounted) {
+                                      _message(
+                                        context,
+                                        success
+                                            ? '已切换到${saved.plan.name}'
+                                            : state.errorMessage ?? '切换失败',
+                                      );
+                                    }
+                                  },
                             child: Text(
-                              '${_schedule[index].restDurationDays} 天',
-                              textAlign: TextAlign.center,
+                              saved.id == state.data!.activePlanId
+                                  ? '使用中'
+                                  : '切换使用',
                             ),
                           ),
-                          IconButton(
-                            tooltip: '增加一天',
-                            onPressed: _schedule[index].restDurationDays == 30
-                                ? null
-                                : () => _changeRestDuration(index, 1),
-                            icon: const Icon(Icons.add_rounded),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
-            const SizedBox(height: 6),
-            OutlinedButton.icon(
-              onPressed: state.isSaving ? null : _insertRestDay,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('插入休息日'),
             ),
-            const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: state.isSaving ? null : _saveSchedule,
-              child: const Text('保存训练安排'),
-            ),
-          ],
-        ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: state.isSaving ? null : () => _create(context),
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('新建计划'),
+          ),
+        ],
       ),
     );
   }
 }
-
-String _scheduleLabel(TrainingDay day) =>
-    day.isRestDay ? '休息日' : '${day.name}日';
-
-class _SplitOption extends StatelessWidget {
-  const _SplitOption({
-    required this.split,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final SplitId split;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => InkWell(
-    onTap: onTap,
-    borderRadius: BorderRadius.circular(14),
-    child: Ink(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: selected ? AppColors.completedSurface : AppColors.surface,
-        border: Border.all(
-          color: selected ? AppColors.accent : AppColors.border,
-          width: selected ? 1.5 : 1,
-        ),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _splitLabel(split),
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 4),
-                Text(_splitDays(split)),
-              ],
-            ),
-          ),
-          Icon(
-            selected ? Icons.check_circle_rounded : Icons.circle_outlined,
-            color: selected ? AppColors.accent : AppColors.border,
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-String _splitLabel(SplitId split) => switch (split) {
-  SplitId.three => '三分化',
-  SplitId.four => '四分化（练四休一）',
-  SplitId.five => '五分化',
-};
-
-String _splitDays(SplitId split) => switch (split) {
-  SplitId.three => '推 · 拉 · 腿',
-  SplitId.four => '胸 · 背 · 肩 · 腿',
-  SplitId.five => '胸 · 背 · 肩 · 腿 · 手臂',
-};

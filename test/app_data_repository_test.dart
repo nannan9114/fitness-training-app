@@ -14,7 +14,7 @@ void main() {
 
     expect(data.version, AppData.currentVersion);
     expect(data.plan.splitId, SplitId.four);
-    expect(data.plan.name, '练四休一');
+    expect(data.plan.name, '四分化');
     expect(data.plan.trainingDays.map((day) => day.name), ['胸', '背', '肩', '腿']);
     expect(
       data.currentSession.currentExerciseId,
