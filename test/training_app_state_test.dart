@@ -259,8 +259,45 @@ void main() {
     expect(notification.stopCalls, 2);
   });
 
-  test('训练完成后次日进入休息日，并按自定义天数进入下一训练日', () async {
-    var now = DateTime(2026, 8, 30, 12).millisecondsSinceEpoch;
+  for (final delayDays in [1, 7]) {
+    test('延后 $delayDays 天完成训练，当天刷新和重开不切日，次日正常推进', () async {
+      var now = DateTime(2026, 10, 1, 12).millisecondsSinceEpoch;
+      final repository = AppDataRepository(storage: MemoryAppDataStorage());
+      var state = TrainingAppState(repository: repository, clock: () => now);
+      addTearDown(() => state.dispose());
+      await state.initialize();
+
+      // Repeat across several cycles so a stale schedule date cannot accumulate.
+      for (var cycle = 0; cycle < 8; cycle++) {
+        final day = state.currentDay!;
+        now += Duration(days: delayDays).inMilliseconds;
+        await state.refreshScheduleForToday();
+        expect(state.currentDay!.id, day.id);
+        for (final exercise in day.exercises) {
+          await state.selectExercise(exercise.id);
+          for (var set = 0; set < exercise.targetSets; set++) {
+            expect(await state.completeCurrentSet(), isTrue);
+          }
+        }
+        expect(state.data!.currentSession.status, SessionStatus.completed);
+        await state.refreshScheduleForToday();
+        expect(state.currentDay!.id, day.id);
+        state.dispose();
+        state = TrainingAppState(repository: repository, clock: () => now);
+        await state.initialize();
+        expect(state.currentDay!.id, day.id);
+        expect(state.data!.currentSession.status, SessionStatus.completed);
+        now += const Duration(days: 1).inMilliseconds;
+        await state.refreshScheduleForToday();
+        expect(state.currentDay!.id, isNot(day.id));
+        expect(state.data!.currentSession.status, SessionStatus.inProgress);
+        expect(state.completedSets(state.currentExercise!), 0);
+      }
+    });
+  }
+
+  test('延后完成训练后次日进入休息日，并按自定义天数进入下一训练日', () async {
+    var now = DateTime(2026, 8, 25, 12).millisecondsSinceEpoch;
     final storage = MemoryAppDataStorage();
     final repository = AppDataRepository(storage: storage);
     const firstExercise = Exercise(
@@ -317,6 +354,7 @@ void main() {
     addTearDown(state.dispose);
     await state.initialize();
 
+    now = DateTime(2026, 8, 30, 12).millisecondsSinceEpoch;
     expect(await state.completeCurrentSet(), isTrue);
     expect(await state.refreshScheduleForToday(), isTrue);
     expect(state.currentDay!.id, 'train_a');

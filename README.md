@@ -6,10 +6,10 @@
 
 [![Flutter](https://img.shields.io/badge/Flutter-3.47-02569B?logo=flutter&logoColor=white)](https://flutter.dev/)
 [![Platform](https://img.shields.io/badge/Platform-Android-3DDC84?logo=android&logoColor=white)](#运行项目)
-[![Tests](https://img.shields.io/badge/Tests-14%20passed-2E7D32)](#质量验证)
+[![Tests](https://img.shields.io/badge/Tests-16%20passed-2E7D32)](#质量验证)
 [![Release](https://img.shields.io/github/v/release/nannan9114/fitness-training-app?label=Release)](https://github.com/nannan9114/fitness-training-app/releases/latest)
 
-[下载最新版 APK](https://github.com/nannan9114/fitness-training-app/releases/latest) · [查看源码](https://github.com/nannan9114/fitness-training-app)
+[下载最新版 Debug APK](https://github.com/nannan9114/fitness-training-app/releases/latest/download/app-debug.apk) · [更新日志](CHANGELOG.md) · [查看源码](https://github.com/nannan9114/fitness-training-app)
 
 </div>
 
@@ -33,7 +33,7 @@
 ## 它能做什么
 
 - **管理训练计划**：编辑训练日、动作名称和目标组数。
-- **长按拖动排序**：像整理桌面图标一样调整动作顺序。
+- **长按拖动排序**：调整动作顺序；长按后卡片放大、显示阴影与描边，并提供提示和轻震反馈。
 - **三／四／五分化**：快速套用内置方案，也可以继续自定义。
 - **安排休息日**：在训练周期任意位置插入休息日并设置持续天数。
 - **记录完成进度**：完成一组后立即更新当前动作和整日进度。
@@ -51,12 +51,15 @@ flowchart LR
     D --> E[组间休息计时]
     E -->|继续| C
     D --> F[本地自动保存]
-    C -->|全部完成| G[进入下一训练日或休息日]
+    C -->|全部完成| G[今日训练已完成，停留在当天]
+    G -->|次日| H[进入下一训练日或休息日]
 ```
 
 ## 下载安装
 
-前往 [Releases](https://github.com/nannan9114/fitness-training-app/releases/latest) 下载最新 Android APK。
+当前最新版本为 **1.0.1（build 2）**：[直接下载 Debug APK](https://github.com/nannan9114/fitness-training-app/releases/latest/download/app-debug.apk)（约 146.3 MiB），或前往 [Releases](https://github.com/nannan9114/fitness-training-app/releases/latest) 查看版本说明和校验文件。
+
+本次修复了延后完成训练时当天提前跳日的问题，并增强动作长按排序反馈。详细原因和验证范围见 [更新日志](CHANGELOG.md)。
 
 当前公开包使用项目现有的 **debug 签名**，适合测试和覆盖安装此前由本项目生成、签名相同的 debug 版本；它不是应用商店正式签名包。
 
@@ -143,16 +146,16 @@ flowchart TD
 
 ```text
 flutter analyze  → No issues found
-flutter test     → 14 tests passed
+flutter test     → 16 tests passed
 ```
 
-测试覆盖本地数据恢复、训练进度、计划编辑、动作排序、训练日重置、休息日切换及主要页面交互。
+测试覆盖本地数据恢复、训练进度、计划编辑、动作排序及保存、训练日重置、休息日切换及主要页面交互；包含延后 1 天或 7 天完成训练、连续多轮训练、当天刷新和重新启动的回归检查。
 
 ## 当前版本
 
 | 项目 | 内容 |
 |---|---|
-| App 版本 | `1.0.0+1` |
-| 发布标签 | `v1.0.0-build.1` |
+| App 版本 | `1.0.1+2` |
+| 发布标签 | `v1.0.1-build.2` |
 | Android 包名 | `com.megumin.fitness_training_app` |
 | 数据方式 | 设备本地保存，无账号和服务器依赖 |

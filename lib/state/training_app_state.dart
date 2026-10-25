@@ -140,8 +140,11 @@ class TrainingAppState extends ChangeNotifier with WidgetsBindingObserver {
         completedSetsByExercise: updatedCompleted,
         restStartedAt: allDone ? null : _clock(),
         status: allDone ? SessionStatus.completed : SessionStatus.inProgress,
-        scheduleDayStartedOn:
-            value.currentSession.scheduleDayStartedOn ?? _todayKey(),
+        // A delayed workout must remain completed until the day AFTER it is
+        // finished, rather than advancing from an old scheduled start date.
+        scheduleDayStartedOn: allDone
+            ? _todayKey()
+            : value.currentSession.scheduleDayStartedOn ?? _todayKey(),
       ),
     );
     return _commit(candidate);
@@ -171,7 +174,10 @@ class TrainingAppState extends ChangeNotifier with WidgetsBindingObserver {
               ? SessionStatus.completed
               : SessionStatus.inProgress,
           scheduleDayStartedOn:
-              value.currentSession.scheduleDayStartedOn ?? _todayKey(),
+              next == null &&
+                  value.currentSession.status != SessionStatus.completed
+              ? _todayKey()
+              : value.currentSession.scheduleDayStartedOn ?? _todayKey(),
         ),
       ),
     );

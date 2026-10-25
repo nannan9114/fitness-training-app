@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/app_data.dart';
@@ -17,6 +18,55 @@ class _PlanEditorScreenState extends State<PlanEditorScreen> {
   var _selectedDayIndex = 0;
   var _idSeed = 0;
   bool _initialized = false;
+  bool _isDragging = false;
+
+  Widget _dragProxy(Widget child, int index, Animation<double> animation) {
+    return AnimatedBuilder(
+      animation: animation,
+      child: child,
+      builder: (context, child) {
+        final lift = Curves.easeOutCubic.transform(animation.value);
+        final shape = BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.22 * lift),
+              blurRadius: 20 * lift,
+              offset: Offset(0, 8 * lift),
+            ),
+          ],
+        );
+        return Transform.scale(
+          key: const ValueKey('exercise-drag-proxy'),
+          scale: 1 + 0.025 * lift,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(
+                bottom: 10,
+                child: DecoratedBox(decoration: shape),
+              ),
+              child!,
+              Positioned.fill(
+                bottom: 10,
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: AppColors.accent.withValues(alpha: lift),
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
   @override
   void didChangeDependencies() {
@@ -208,9 +258,8 @@ class _PlanEditorScreenState extends State<PlanEditorScreen> {
                             itemBuilder: (context, index) {
                               final selected = index == _selectedDayIndex;
                               return OutlinedButton(
-                                onPressed: () => setState(
-                                  () => _selectedDayIndex = index,
-                                ),
+                                onPressed: () =>
+                                    setState(() => _selectedDayIndex = index),
                                 style: OutlinedButton.styleFrom(
                                   backgroundColor: selected
                                       ? AppColors.primary
@@ -240,7 +289,7 @@ class _PlanEditorScreenState extends State<PlanEditorScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            '长按项目卡片并上下拖动排序',
+                            _isDragging ? '已选中项目，上下拖动后松手放置' : '长按项目卡片并上下拖动排序',
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                           const SizedBox(height: 10),
@@ -253,6 +302,13 @@ class _PlanEditorScreenState extends State<PlanEditorScreen> {
                     sliver: SliverReorderableList(
                       itemCount: _selectedDay.exercises.length,
                       onReorderItem: _reorderExercises,
+                      onReorderStart: (_) {
+                        FocusManager.instance.primaryFocus?.unfocus();
+                        HapticFeedback.selectionClick();
+                        setState(() => _isDragging = true);
+                      },
+                      onReorderEnd: (_) => setState(() => _isDragging = false),
+                      proxyDecorator: _dragProxy,
                       itemBuilder: (context, index) {
                         final exercise = _selectedDay.exercises[index];
                         return ReorderableDelayedDragStartListener(
@@ -269,10 +325,7 @@ class _PlanEditorScreenState extends State<PlanEditorScreen> {
                               onNameChanged: (value) =>
                                   _updateExercise(index, name: value),
                               onSetsChanged: (value) => setState(
-                                () => _updateExercise(
-                                  index,
-                                  targetSets: value,
-                                ),
+                                () => _updateExercise(index, targetSets: value),
                               ),
                               onDelete: () => _deleteExercise(index),
                             ),
@@ -337,55 +390,55 @@ class _ExerciseEditor extends StatelessWidget {
       ),
       child: Column(
         children: [
-        Row(
-          children: [
-            Icon(
-              Icons.drag_indicator_rounded,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: TextFormField(
-                initialValue: exercise.name,
-                onChanged: onNameChanged,
-                decoration: InputDecoration(
-                  labelText: isActive ? '项目名称 · 正在训练' : '项目名称',
-                  isDense: true,
+          Row(
+            children: [
+              Icon(
+                Icons.drag_indicator_rounded,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextFormField(
+                  initialValue: exercise.name,
+                  onChanged: onNameChanged,
+                  decoration: InputDecoration(
+                    labelText: isActive ? '项目名称 · 正在训练' : '项目名称',
+                    isDense: true,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 6),
-            IconButton(
-              tooltip: isActive ? '正在训练的项目不能删除' : '删除项目',
-              onPressed: canDelete ? onDelete : null,
-              icon: const Icon(Icons.delete_outline_rounded),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            const Expanded(child: Text('目标组数')),
-            IconButton.filledTonal(
-              onPressed: exercise.targetSets > 1
-                  ? () => onSetsChanged(exercise.targetSets - 1)
-                  : null,
-              icon: const Icon(Icons.remove_rounded),
-            ),
-            SizedBox(
-              width: 44,
-              child: Text(
-                '${exercise.targetSets}',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleMedium,
+              const SizedBox(width: 6),
+              IconButton(
+                tooltip: isActive ? '正在训练的项目不能删除' : '删除项目',
+                onPressed: canDelete ? onDelete : null,
+                icon: const Icon(Icons.delete_outline_rounded),
               ),
-            ),
-            IconButton.filledTonal(
-              onPressed: () => onSetsChanged(exercise.targetSets + 1),
-              icon: const Icon(Icons.add_rounded),
-            ),
-          ],
-        ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Expanded(child: Text('目标组数')),
+              IconButton.filledTonal(
+                onPressed: exercise.targetSets > 1
+                    ? () => onSetsChanged(exercise.targetSets - 1)
+                    : null,
+                icon: const Icon(Icons.remove_rounded),
+              ),
+              SizedBox(
+                width: 44,
+                child: Text(
+                  '${exercise.targetSets}',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              IconButton.filledTonal(
+                onPressed: () => onSetsChanged(exercise.targetSets + 1),
+                icon: const Icon(Icons.add_rounded),
+              ),
+            ],
+          ),
         ],
       ),
     ),

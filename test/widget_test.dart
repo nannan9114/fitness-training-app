@@ -76,16 +76,40 @@ void main() {
     expect(find.text('保存训练计划'), findsOneWidget);
     expect(find.text('长按项目卡片并上下拖动排序'), findsOneWidget);
 
+    final originalDay = state.data!.plan.trainingDays.first;
+    final originalIds = originalDay.exercises.map((item) => item.id).toList();
+    final cardHeight = tester
+        .getSize(find.byKey(ValueKey(originalIds.first)))
+        .height;
     final dragHandle = find.byIcon(Icons.drag_indicator_rounded).first;
     final gesture = await tester.startGesture(tester.getCenter(dragHandle));
     await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 250));
     expect(tester.takeException(), isNull);
-    await gesture.moveBy(const Offset(0, 140));
-    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('已选中项目，上下拖动后松手放置'), findsOneWidget);
+    final proxy = tester.widget<Transform>(
+      find.byKey(const ValueKey('exercise-drag-proxy')),
+    );
+    expect(proxy.transform.storage[0], greaterThan(1));
+    // Move continuously, as a finger would, so the insertion gap can animate.
+    for (var step = 0; step < 12; step++) {
+      await gesture.moveBy(Offset(0, (cardHeight + 10) / 12));
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
     await gesture.up();
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+    expect(find.byKey(const ValueKey('exercise-drag-proxy')), findsNothing);
+    expect(find.text('长按项目卡片并上下拖动排序'), findsOneWidget);
+    await tester.tap(find.text('保存训练计划'));
+    await tester.pumpAndSettle();
+    expect(
+      state.data!.plan.trainingDays.first.exercises.map((item) => item.id),
+      [originalIds[1], originalIds[0], ...originalIds.skip(2)],
+    );
+    expect(state.currentExercise!.id, originalIds.first);
 
     await tester.pumpWidget(const SizedBox.shrink());
     state.dispose();
